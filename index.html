@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FLETXO FLEET ADMIN PANEL</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      background: linear-gradient(135deg, #020024, #090979, #00d4ff);
+      font-family: 'Orbitron', sans-serif;
+      color: white;
+      height: 100vh;
+      overflow: auto;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #00ffff;
+    }
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-around;
+      gap: 20px;
+    }
+    .panel {
+      background: rgba(0, 0, 0, 0.85);
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 0 25px #00ffff;
+      width: 100%;
+      max-width: 700px;
+    }
+    input, select {
+      padding: 12px;
+      margin: 10px 0;
+      width: 100%;
+      border-radius: 8px;
+      border: none;
+      background: #111;
+      color: #0ff;
+    }
+    button {
+      background: #00ffff;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #000;
+      cursor: pointer;
+      transition: 0.3s;
+      width: 100%;
+    }
+    button:hover {
+      background: #0ff;
+    }
+    .keys {
+      margin-top: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 14px;
+    }
+    .key-box {
+      background: #111;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .key-box span {
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+
+<h1>FLETXO FLEET — ADMIN PANEL</h1>
+<div class="container">
+  <div class="panel">
+    <h2>Generate New Key</h2>
+    <select id="duration">
+      <option value="30m">30 Minutes</option>
+      <option value="1d">1 Day</option>
+      <option value="3d">3 Days</option>
+      <option value="7d">7 Days</option>
+      <option value="30d">30 Days</option>
+    </select>
+    <button onclick="generateKey()">Generate Key</button>
+
+    <h3>Active Keys</h3>
+    <div class="keys" id="activeKeys"></div>
+
+    <h3>Inactive Keys</h3>
+    <div class="keys" id="inactiveKeys"></div>
+  </div>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyBzOKZZAxoBc9OPJeI13H5B7Ap8Aj2PbpY",
+    databaseURL: "https://lwfle-89726-default-rtdb.firebaseio.com/"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  function randomKey(length = 16) {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let key = "";
+    for (let i = 0; i < length; i++) {
+      key += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return key;
+  }
+
+  function durationToMs(duration) {
+    const map = {
+      '30m': 30 * 60 * 1000,
+      '1d': 1 * 24 * 60 * 60 * 1000,
+      '3d': 3 * 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+      '30d': 30 * 24 * 60 * 60 * 1000
+    };
+    return map[duration] || 0;
+  }
+
+  function generateKey() {
+    const key = randomKey();
+    const duration = document.getElementById("duration").value;
+    const now = Date.now();
+    const expiresAt = now + durationToMs(duration);
+
+    db.ref("accessKeys/" + key).set({
+      createdAt: now,
+      expiresAt: expiresAt,
+      used: false,
+      device: null
+    }).then(() => {
+      alert("Key generated: " + key);
+      fetchKeys();
+    });
+  }
+
+  function fetchKeys() {
+    db.ref("accessKeys").once("value", (snapshot) => {
+      const activeContainer = document.getElementById("activeKeys");
+      const inactiveContainer = document.getElementById("inactiveKeys");
+      activeContainer.innerHTML = "";
+      inactiveContainer.innerHTML = "";
+
+      const now = Date.now();
+      snapshot.forEach(child => {
+        const key = child.key;
+        const data = child.val();
+        const box = document.createElement("div");
+        box.className = "key-box";
+
+        const info = document.createElement("span");
+        info.innerHTML = `
+          <b>${key}</b><br>
+          Expires: ${new Date(data.expiresAt).toLocaleString()}<br>
+          Used: ${data.used || false}<br>
+          Device: ${data.device || "N/A"}
+        `;
+
+        const del = document.createElement("button");
+        del.textContent = "❌";
+        del.style.marginLeft = "10px";
+        del.onclick = () => {
+          db.ref("accessKeys/" + key).remove().then(fetchKeys);
+        };
+
+        box.appendChild(info);
+        box.appendChild(del);
+
+        if (!data.used && data.expiresAt > now) {
+          activeContainer.appendChild(box);
+        } else {
+          inactiveContainer.appendChild(box);
+        }
+      });
+    });
+  }
+
+  // Refresh every 10 seconds
+  setInterval(fetchKeys, 10000);
+  fetchKeys();
+</script>
+
+</body>
+</html>
